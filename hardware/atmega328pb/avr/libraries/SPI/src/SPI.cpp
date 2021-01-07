@@ -13,14 +13,15 @@
 
 #include "SPI.h"
 
-SPIClass SPI;
+#ifndef SPCR
+ #define SPCR SPCR0
+ #define SPSR SPSR0
+ #define SPDR SPDR0
+#endif
 
-uint8_t SPIClass::initialized = 0;
-uint8_t SPIClass::interruptMode = 0;
-uint8_t SPIClass::interruptMask = 0;
-uint8_t SPIClass::interruptSave = 0;
-#ifdef SPI_TRANSACTION_MISMATCH_LED
-uint8_t SPIClass::inTransactionFlag = 0;
+SPIClass SPI(SS,MISO,MOSI,SCK,&SPCR,&SPSR,&SPDR);
+#ifdef HAVE_SPI1
+SPIClass SPI1(SS1,MISO1,MOSI1,SCK1,&SPCR1,&SPSR1,&SPDR1);
 #endif
 
 void SPIClass::begin()
@@ -29,26 +30,26 @@ void SPIClass::begin()
   noInterrupts(); // Protect from a scheduler and prevent transactionBegin
   if (!initialized) {
     // Set SS to high so a connected chip will be "deselected" by default
-    uint8_t port = digitalPinToPort(SS);
-    uint8_t bit = digitalPinToBitMask(SS);
+    uint8_t port = digitalPinToPort(ss);
+    uint8_t bit = digitalPinToBitMask(ss);
     volatile uint8_t *reg = portModeRegister(port);
 
     // if the SS pin is not already configured as an output
     // then set it high (to enable the internal pull-up resistor)
     if(!(*reg & bit)){
-      digitalWrite(SS, HIGH);
+      digitalWrite(ss, HIGH);
     }
 
     // When the SS pin is set as OUTPUT, it can be used as
     // a general purpose output port (it doesn't influence
     // SPI operations).
-    pinMode(SS, OUTPUT);
+    pinMode(ss, OUTPUT);
 
     // Warning: if the SS pin ever becomes a LOW INPUT then SPI
     // automatically switches to Slave, so the data direction of
     // the SS pin MUST be kept as OUTPUT.
-    SPCR |= _BV(MSTR);
-    SPCR |= _BV(SPE);
+    *spcr |= _BV(MSTR);
+    *spcr |= _BV(SPE);
 
     // Set direction register for SCK and MOSI pin.
     // MISO pin automatically overrides to INPUT.
@@ -56,8 +57,8 @@ void SPIClass::begin()
     // clocking in a single bit since the lines go directly
     // from "input" to SPI control.
     // http://code.google.com/p/arduino/issues/detail?id=888
-    pinMode(SCK, OUTPUT);
-    pinMode(MOSI, OUTPUT);
+    pinMode(sck, OUTPUT);
+    pinMode(mosi, OUTPUT);
   }
   initialized++; // reference count
   SREG = sreg;
@@ -71,7 +72,7 @@ void SPIClass::end() {
     initialized--;
   // If there are no more references disable SPI
   if (!initialized) {
-    SPCR &= ~_BV(SPE);
+    *spcr &= ~_BV(SPE);
     interruptMode = 0;
     #ifdef SPI_TRANSACTION_MISMATCH_LED
     inTransactionFlag = 0;
